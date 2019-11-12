@@ -3,4 +3,4 @@ project(ls C)
 
 set(CMAKE_C_STANDARD 99)
 
-add_executable(ls ls.c)
+add_executable(ls ls.c linkedlist.h linkedlist.c)
