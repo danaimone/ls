@@ -2,10 +2,6 @@
 // Created by aimoned on 11/11/19.
 //
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <assert.h>
 #include "linkedlist.h"
 
 node *createNode(char *string) {
@@ -73,10 +69,78 @@ void swapNodes(node *a, node* b) {
 }
 
 void printList(node *head) {
-    node *temp = head;
-    while (temp != NULL) {
-        printf("%s\t", temp->string);
-        temp = temp -> next;
+    if (head != NULL) {
+        node *temp = head;
+        while (temp != NULL) {
+            printf("%s\t", temp->string);
+            temp = temp->next;
+        }
+    } else {
+        printf("printList error: function was called, but the given list did not have anything to print.");
     }
 }
 
+void freeList(node *head) {
+    node *temp;
+    while (head != NULL) {
+        temp = head;
+        head = head->next;
+        free(temp);
+    }
+}
+
+bool inList(node *head, char *data) {
+    node *temp = head;
+    while (temp != NULL) {
+        if (strcoll(temp->string, data)) {
+            return true;
+        }
+        temp = temp->next;
+    }
+    return false;
+}
+
+void push(node **headReference, char *data) {
+    node *newNode = (node*) malloc(sizeof(node));
+    newNode->string = data;
+    newNode->next = (*headReference);
+    (*headReference) = newNode;
+}
+
+node *unionLinkedList(node *head1, node *head2) {
+    node *result = NULL;
+    node *t1 = head1, *t2 = head2;
+
+    while (t1 != NULL) {
+        push(&result, t1->string);
+        t1 = t1->next;
+    }
+
+    while (t2 != NULL) {
+        if (!inList(result, t2->string)) {
+            push(&result, t2->string);
+        }
+        t2 = t2->next;
+    }
+
+    return result;
+}
+
+node *sortedMerge(node *head1, node *head2) {
+    node *result = NULL;
+
+    if (head1 == NULL) {
+        return (head2);
+    } else if (head2 == NULL) {
+        return (head1);
+    }
+
+    if (strcoll(head1->string, head2->string) <= 0) {
+        result = head1;
+        result->next = sortedMerge(head1->next, head2);
+    } else {
+        result = head2;
+        result->next = sortedMerge(head1, head2->next);
+    }
+    return (result);
+}

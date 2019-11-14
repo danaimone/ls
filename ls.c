@@ -9,30 +9,21 @@
 #include <stdlib.h>
 #include <pwd.h>
 #include <grp.h>
-#include <sys/types.h>
 #include <sys/stat.h>
 #include <stdbool.h>
 #include <unistd.h>
 #include <time.h>
+#include <limits.h>
+#include <sys/ioctl.h>
 #include "linkedlist.h"
+#include "filter.h"
 
 bool printAllFlag = false;
-bool printLongFlag = false;
-bool printINode = false;
 bool printDirs = false;
+bool printINodeFlag = false;
+bool printLongFlag = false;
 
-
-char* fileType(struct stat fstat) {
-    static const mode_t modeMask[] = {S_IFBLK, S_IFCHR, S_IFDIR, S_IFLNK, S_IFIFO, S_IFREG, S_IFSOCK};
-    static char* modeChar[] = {"b", "c", "d", "l", "p", "f", "s", "?"};
-    size_t modeSize = sizeof(modeMask) / sizeof(int);
-    mode_t fileMode = fstat.st_mode;
-    int i = 0;
-    while (i < modeSize && modeMask[i] != (fileMode & S_IFMT)) {
-        ++i;
-    }
-    return modeChar[i];
-}
+void printColumns(node *head, int maxFileLength);
 
 char* permissionStringBuilder(mode_t statBits, struct stat sb) {
     char *permissionString = malloc(sizeof(char[12]));
@@ -55,46 +46,82 @@ char* permissionStringBuilder(mode_t statBits, struct stat sb) {
     return permissionString;
 }
 
-
-int dirsize(struct dirent *dp, DIR *dir) {
-    int size = 0;
-    while (dp != NULL) {
-        ++size;
-        dp = readdir(dir);
-    }
-    return size;
-}
-
-bool prefix(const char *pre, const char *str) {
-    return strncmp(pre, str, strlen(pre)) == 0 ? true : false;
-}
-
-/*
- * Filters out unnecessary files (such as . and ..) as well as files prefixed with ., since
- * this is not presented normally in ls.
- */
-int filter(char *entry) {
-    if ((strcoll(entry, ".") == 0) || (strcoll(entry, "..") == 0) || prefix(".", entry)) {
-        return true;
-    } else {
-        return false;
+void getArgFlags(int argc, char *argv[]) {
+    int opt;
+    while ((opt = getopt(argc, argv, ":if:adil")) != -1) {
+        switch (opt) {
+            case 'a':
+                printAllFlag = true;
+                break;
+            case 'd':
+                printDirs = true;
+            case 'i':
+                printINodeFlag = true;
+            case 'l':
+                printLongFlag = true;
+                break;
+            case '?':
+                printf("ls: invalid option -- %c\n", optopt);
+            default:
+                break;
+        }
     }
 }
 
-void printLong(struct dirent **dp, int size) {
+void getCommandArgs(node *files, node *directories, int argc, char *argv[]) {
+    struct stat sb;
+    for (int i = 1; i < argc; i++) {
+        if (!isFlag(argv[i])) {
+            if (stat(argv[i], &sb) != 0) {
+                printf("./ls: cannot access '%s': No such file or directory\n", argv[i]);
+            } else {
+                if (strcoll(fileType(sb), "d") == 0 ) {
+                    appendNode(&directories, strdup(argv[i]));
+                } else {
+                    appendNode(&files, strdup(argv[i]));
+                }
+            }
+        }
+    }
+}
+
+int getMaxFileLength(node *head) {
+    int length = NULL;
+    int maxLength = NULL;
+    while (head != NULL) {
+        length = (int) strlen(head->string);
+        if (length > maxLength) {
+            maxLength = length;
+        }
+        head = head->next;
+    }
+
+    if (printINodeFlag) {
+        maxLength += 12;
+    }
+    return maxLength + 1;
+}
+
+char* concat(const char *s1, const char *s2)
+{
+    char *result = malloc(strlen(s1) + strlen(s2) + 1);
+    strcpy(result, s1);
+    strcat(result, s2);
+    return result;
+}
+
+void printLong(node *head) {
     struct stat sb;
     struct passwd *password;
     struct group *grp;
     char *name = "";
     char* group = "";
     char time[255];
-    int i = 0;
-    while (i < size) {
-        if (stat(dp[i]->d_name, &sb) == -1){
-            perror("stat");
+    while (head != NULL) {
+        if (stat(head->string, &sb) == -1){
+            perror("stat in printLong");
             exit(EXIT_FAILURE);
         }
-
         if ((password = getpwuid(sb.st_uid)) != NULL)
             name = password->pw_name;
 
@@ -104,8 +131,8 @@ void printLong(struct dirent **dp, int size) {
         char *permissionString = permissionStringBuilder(sb.st_mode, sb);
         strftime(time, 255, "%b %d %H:%M", localtime((&sb.st_mtime)));
         off_t fileSize = sb.st_size;
-        printf("%s %ld %s %s %5ld %s %s\n", permissionString, sb.st_nlink, name, group, fileSize, time, dp[i]->d_name);
-        ++i;
+        printf("%s %hu %s %s %5lld %s %s\n", permissionString, sb.st_nlink, name, group, fileSize, time, head->string);
+        head = head->next;
     }
 }
 
@@ -123,65 +150,54 @@ void printDir(struct dirent **dp, int size) {
 void list(DIR *dir) {
     assert(dir != NULL);
     struct dirent *ent = readdir(dir);
-    struct dirent **list;
-    node *directory;
-    int size = dirsize(ent, dir);
-    list = malloc((size * sizeof(*list)));
-    if (list == NULL) { // somehow we ran out of memory, should never happen
-        closedir(dir);
-        perror("malloc");
-        exit(1);
-    }
-    rewinddir(dir); // directory reset, necessary as the DIR object has already been exhausted
-    size = 0; // resetting size for iteration
-    while ((ent = readdir(dir)) != NULL) {
-        if (!filter(ent->d_name) || printAllFlag)
-            list[size++] = ent;
-    }
-    if (printLongFlag) {
-        printLong(list, size);
+    node *directory = NULL;
+    if (!printDirs) {
+        while (ent != NULL) {
+            if (!filter(ent->d_name) || printAllFlag)
+                appendNode(&directory, ent->d_name);
+            ent = readdir(dir);
+        }
     } else {
-        printDir(list, size);
+        appendNode(&directory, ".");
+    }
+
+    if (printLongFlag) {
+        printLong(directory);
+    } else {
+        int maxLength = getMaxFileLength(directory);
+        printColumns(directory, maxLength);
     }
 }
 
-void getArgFlags(int argc, char *argv[]) {
-    int opt;
-    while ((opt = getopt(argc, argv, "al")) != -1) {
-        switch (opt) {
-            case 'a':
-                printAllFlag = true;
-                break;
-            case 'l':
-                printLongFlag = true;
-                break;
-            case 'i':
-                printINode = true;
-            case 'd':
-                printDirs = true;
-        }
-    }
+char *buildFormatString(int maxFileLength) {
+    char *format = malloc(sizeof(maxFileLength));
+    sprintf(format, "%d", maxFileLength);
+    char *printString = malloc(sizeof(10));
+    strcpy(printString, "%-");
+    strcat(printString, format);
+    strcat(printString, "s ");
+    return printString;
 }
 
-bool isFlag(const char *str) {
-    return prefix("-", str);
-}
-
-void getCommandArgs(node *files, node *directories, int argc, char *argv[]) {
-    struct stat sb;
-    for (int i = 1; i < argc; i++) {
-        if (!isFlag(argv[i])) {
-            if (stat(argv[i], &sb) != 0) {
-                printf("./ls: cannot access '%s': No such file or directory\n", argv[i]);
-            } else {
-                if (strcoll(fileType(sb), "d") == 0) {
-                    appendNode(&directories, strdup(argv[i]));
-                } else {
-                    appendNode(&files, strdup(argv[i]));
-                }
+void printColumns(node *head, int maxFileLength) {
+    struct winsize size;
+    int ret = ioctl(STDOUT_FILENO, TIOCGWINSZ, &size);
+    if (ret != -1) {
+        int maxColumns = size.ws_col / maxFileLength;
+        int i = 1;
+        while (head != NULL) {
+            char *printString = buildFormatString(maxFileLength);
+            printf(printString, head->string);
+            if (maxColumns != 0 && i % maxColumns == 0) {
+                printf("\n");
             }
+            i++;
+            head = head->next;
         }
+    } else {
+        printList(head);
     }
+    printf("\n");
 }
 
 /*
@@ -192,24 +208,62 @@ void getCommandArgs(node *files, node *directories, int argc, char *argv[]) {
  *
  * Parameters:
  * node *files = the linked list of files given from argv
- * node *files = the linked list of directories given from argv
+ * node *directories = the linked list of directories given from argv
  */
 void listLinked(node *files, node *directories) {
-    if (files != NULL) {
-        printList(files);
+    node *unionList = NULL;
+    if (printDirs) {
+        unionList = sortedMerge(directories, files);
+        files = unionList;
     }
 
-    while (directories != NULL) {
+    int maxFileLength = getMaxFileLength(files);
+    if (files != NULL) {
+        if (!printLongFlag) {
+            printColumns(files, maxFileLength);
+            printf("\n");
+        } else {
+            printLong(files);
+        }
+        printf("\n");
+    }
 
 
+    while (directories != NULL && !printDirs) {
+        node *fileList = NULL;
+        DIR *dir = opendir(directories->string);
+        if (dir == NULL) {
+            perror("opendir");
+        }
+        char *currentDir = NULL;
+        currentDir = getcwd(currentDir, PATH_MAX);
+        chdir(directories->string);
+        struct dirent *ent = readdir(dir);
+        while (ent != NULL) {
+            if (!filter(ent->d_name) || printAllFlag)
+                appendNode(&fileList, ent->d_name);
+            ent = readdir(dir);
+        }
+        printf("%s:\n", directories->string);
+        bubbleSort(fileList);
+        int maxDirectoryLength = getMaxFileLength(fileList);
+        if (!printLongFlag) {
+            printColumns(fileList, maxDirectoryLength);
+        } else {
+            printLong(fileList);
+        }
+        closedir(dir);
+        chdir(currentDir);
+        free(currentDir);
+        directories = directories->next;
     }
 }
 
 int main(int argc, char *argv[]) {
     node *files = NULL;
     node *directories = NULL;
-    getCommandArgs(&files, &directories, argc, argv);
     getArgFlags(argc, argv);
+    getCommandArgs(&files, &directories, argc, argv);
     if (files == NULL && directories == NULL) {
         DIR *d = opendir(".");
         list(d);
@@ -221,9 +275,8 @@ int main(int argc, char *argv[]) {
     } else {
         listLinked(files, directories);
     }
+    freeList(files);
+    freeList(directories);
     return 0;
 }
 
-/* TODO: process all argv that are lsable (skip flags) and loop through the directories
- * make a linked list of files and a linked list of directories
- */

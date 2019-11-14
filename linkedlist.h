@@ -5,6 +5,12 @@
 #ifndef LS_LINKEDLIST_H
 #define LS_LINKEDLIST_H
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+#include <stdbool.h>
+
 typedef struct Node {
     struct Node *next;
     char *string;
@@ -66,4 +72,23 @@ void swapNodes(node *a, node *b);
 
 // TODO: comment function
 void printList(node *head);
+
+// TODO: comment function
+void freeList(node *head);
+
+bool inList(node *head, char *data);
+
+/*
+ * Function: push
+ * --------------------
+ * insert a node at the beginning of the given linkedList
+ *
+ * node *head: pointer to the entire linked list
+ * char *data: new data to be inserted
+ */
+void push(node **headReference, char *data);
+
+node *unionLinkedList(node *head1, node *head2);
+
+node *sortedMerge(node *head1, node *head2);
 #endif //LS_LINKEDLIST_H
