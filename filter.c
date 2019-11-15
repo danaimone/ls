@@ -20,7 +20,7 @@ bool prefix(const char *pre, const char *str) {
     return strncmp(pre, str, strlen(pre)) == 0 ? true : false;
 }
 
-int filter(char *entry) {
+bool filter(char *entry) {
     return (strcoll(entry, ".") == 0) || (strcoll(entry, "..") == 0) || prefix(".", entry);
 }
 

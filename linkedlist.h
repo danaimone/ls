@@ -67,15 +67,42 @@ node *copyLinkedList(node *head);
  */
 void bubbleSort(node *head);
 
-// TODO: comment function
+/*
+ * Function: swapNodes
+ * --------------------
+ * swaps two nodes pointers
+ *
+ * node *a: node to be switched
+ * node *b: node to be switched
+ */
 void swapNodes(node *a, node *b);
 
-// TODO: comment function
+/*
+ * Function: printList
+ * --------------------
+ * while a linkedList still has next, print the data stored in node
+ *
+ * node *head: linkedList to be iterated through and printed
+ */
 void printList(node *head);
 
-// TODO: comment function
+/*
+ * Function: freeList
+ * --------------------
+ * frees a linkedList from memory
+ *
+ * node *head: linked list to be freed
+ */
 void freeList(node *head);
 
+/*
+ * Function: inList
+ * --------------------
+ * checks if given data is in list
+ *
+ * node *head: linked list to be checked
+ * char *data: string to be checked for
+ */
 bool inList(node *head, char *data);
 
 /*
@@ -88,7 +115,23 @@ bool inList(node *head, char *data);
  */
 void push(node **headReference, char *data);
 
+/*
+ * Function: unionLinkedList
+ * --------------------
+ * unions two linked lists together
+ *
+ * node *head1: linked list to be unioned
+ * node *head2: linked list to be unioned
+ */
 node *unionLinkedList(node *head1, node *head2);
 
+/*
+ * Function: sortedMerge
+ * --------------------
+ * sorts and merged two linkedLists
+ *
+ * node *head1: linked list to be sorted and merged with other linkedList
+ * node *head2: linked list to be sorted and merged with other linkedList
+ */
 node *sortedMerge(node *head1, node *head2);
 #endif //LS_LINKEDLIST_H
