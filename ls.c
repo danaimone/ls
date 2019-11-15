@@ -48,15 +48,17 @@ char* permissionStringBuilder(mode_t statBits, struct stat sb) {
 
 void getArgFlags(int argc, char *argv[]) {
     int opt;
-    while ((opt = getopt(argc, argv, ":if:adil")) != -1) {
+    while ((opt = getopt(argc, argv, "adil:")) != -1) {
         switch (opt) {
             case 'a':
                 printAllFlag = true;
                 break;
             case 'd':
                 printDirs = true;
+                break;
             case 'i':
                 printINodeFlag = true;
+                break;
             case 'l':
                 printLongFlag = true;
                 break;
